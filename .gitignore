@@ -1,0 +1,22 @@
+node_modules/
+dist/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# Audit DB lives in ~/Library/Application Support/things-mcp/ — never check in
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
+
+# IDE
+.vscode/
+.idea/
+
+# Local-only policy override (defaults live in config/policy.default.yaml; user
+# policy lives at ~/Library/Application Support/things-mcp/policy.yaml and is
+# never in the repo)
+config/policy.local.yaml

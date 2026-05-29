@@ -1,0 +1,37 @@
+{
+  "name": "things-mcp-server",
+  "version": "0.1.0",
+  "description": "Local MCP server that exposes Things 3 as agent tools, via URL scheme + AppleScript. Token loaded from macOS Keychain.",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "bin": {
+    "things-mcp": "./dist/index.js",
+    "things-audit": "./dist/scripts/audit-view.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "audit": "node dist/scripts/audit-view.js",
+    "test": "tsx --test src/test/*.test.ts",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "better-sqlite3": "^11.3.0",
+    "js-yaml": "^4.1.0",
+    "zod": "^3.23.8",
+    "zod-to-json-schema": "^3.23.5"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.7.0",
+    "tsx": "^4.19.1",
+    "typescript": "^5.6.2"
+  }
+}

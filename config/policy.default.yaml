@@ -1,0 +1,71 @@
+# Default policy for things-mcp-server.
+#
+# User overrides at ~/Library/Application Support/things-mcp/policy.yaml.
+# User keys merge over these; any tool not listed inherits `default`.
+#
+# Decisions:
+#   allow    — execute normally; chat client's tool approval UI still applies
+#   dry-run  — build the URL but do not invoke `open`; return the URL in result
+#   deny     — reject the call before doing anything
+#
+# Rate limits use sliding window. Format: "<count>/<unit>" where unit is
+# second / minute / hour / day. Omitted = no rate limit.
+
+default:
+  decision: allow
+
+tools:
+  # ---- capture (no token) ----
+  add_todo:
+    decision: allow
+    rate_limit: 100/hour
+  add_project:
+    decision: allow
+    rate_limit: 20/hour
+  bulk_create:
+    decision: allow
+    rate_limit: 10/hour          # bulk ops should be rare; high rate = anomaly
+
+  # ---- reorganize (token, audit-heavy) ----
+  update_todo:
+    decision: allow
+    rate_limit: 60/hour
+  update_project:
+    decision: allow
+    rate_limit: 20/hour
+  complete_todo:
+    decision: allow
+    rate_limit: 100/hour
+  reschedule:
+    decision: allow
+    rate_limit: 60/hour
+  bulk_reorganize:
+    decision: allow
+    rate_limit: 5/hour           # rarest, riskiest
+
+  # ---- read (no token, no rate limits) ----
+  list_todos:
+    decision: allow
+  find_todos:
+    decision: allow
+  get_project:
+    decision: allow
+  list_by_deadline_window:
+    decision: allow
+  list_areas:
+    decision: allow
+  list_tags:
+    decision: allow
+
+  # ---- snapshot + clone (templates-as-projects pattern) ----
+  snapshot:
+    decision: allow
+  clone_project:
+    decision: allow
+    rate_limit: 20/hour          # creates a whole project subtree
+
+  # ---- navigation ----
+  show:
+    decision: allow
+  search:
+    decision: allow
