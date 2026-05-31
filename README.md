@@ -6,6 +6,8 @@ A local MCP server that exposes [Things 3](https://culturedcode.com/things/) as 
 
 ## Architecture
 
+### Today
+
 ```
 Cowork / Claude Desktop
      │ stdio
@@ -15,6 +17,7 @@ things-mcp-server (Node, this repo)
      ├── reorganize tools → things:///update, update-project, json (update)  (token from Keychain)
      ├── read tools       → osascript against Things3                        (no token)
      └── audit log         SQLite at ~/Library/Application Support/things-mcp/audit.db
+                          (plaintext schema; args/error AES-256-GCM encrypted)
 ```
 
 Three trust tiers:
@@ -22,6 +25,123 @@ Three trust tiers:
 - **Capture** is wide open. Worst case of a runaway agent: noise in Inbox.
 - **Reorganize** loads the Things URL auth-token from macOS Keychain on first use. Audit-logged.
 - **Read** uses Apple's published AppleScript dictionary. macOS Automation permission prompts on first use.
+
+### Future (the larger Pepper Potts system)
+
+This MCP is one of three planned surfaces. The full system places a **broker** between Claude and the per-surface MCPs, with policy + content-gate + cross-MCP taint propagation. Bodies of E2E-encrypted content (email, calendar events) never reach Claude — they route to a local model. Claude only sees metadata: sender, subject, timestamps, IDs.
+
+```
+       ┌────────────────────────────────────────────────────────────┐
+       │  Claude  (Cowork desktop · Claude Desktop · Claude iOS)    │
+       └────────────────────────────┬───────────────────────────────┘
+                                    │
+                          today: stdio (local)
+                          future: HTTPS via Tailscale → broker
+                                    │
+                                    ▼
+       ┌────────────────────────────────────────────────────────────┐
+       │  broker  (FUTURE — not in this repo)                       │
+       │                                                            │
+       │   • per-tool policy (allow / prompt / deny / dry-run)      │
+       │   • cross-MCP taint propagation                            │
+       │     (email body marks downstream tool calls untrusted)     │
+       │   • content gate                                           │
+       │     metadata → Claude (cloud) │ bodies → local model only  │
+       │   • encrypted audit log (one row per tool call, end-to-end)│
+       └─┬─────────────────┬──────────────────┬─────────────────────┘
+         │                 │                  │
+   ┌─────▼─────────┐  ┌────▼──────────┐  ┌────▼──────────┐
+   │ things-mcp    │  │ proton-mail-  │  │ proton-cal-   │
+   │ (THIS REPO)   │  │ mcp (FUTURE)  │  │ mcp (FUTURE)  │
+   │               │  │               │  │               │
+   │ URL scheme +  │  │ IMAP + SMTP   │  │ CalDAV        │
+   │ AppleScript   │  │ on 127.0.0.1  │  │ (Proton)      │
+   └─────┬─────────┘  └──────┬────────┘  └──────┬────────┘
+         │                   │                  │
+   ┌─────▼─────────┐   ┌─────▼─────────┐  ┌─────▼─────────┐
+   │  Things 3     │   │ Proton Bridge │  │ Proton CalDAV │
+   │ (Mac local;   │   │ (local; E2E   │  │  endpoint     │
+   │  Things Cloud │   │  decrypts in  │  │               │
+   │  syncs to iOS │   │  memory)      │  │               │
+   │  + Mac + Watch│   └──────┬────────┘  └──────┬────────┘
+   │  + Vision Pro)│          │                  │
+   └───────────────┘   ┌──────▼──────────────────▼──────────┐
+                       │   Proton servers (E2E encrypted)   │
+                       └────────────────────────────────────┘
+
+                       ┌──────────────────────────────────────┐
+                       │  local model  (Ollama or similar)    │
+                       │  Llama 3.3 70B / Qwen 2.5 72B / etc. │
+                       │                                      │
+                       │  Receives email/calendar BODIES via  │
+                       │  the broker's content gate. Bodies   │
+                       │  never leave your Mac.               │
+                       └──────────────────────────────────────┘
+```
+
+What each addition unlocks:
+
+- **proton-mail-mcp** — Pepper can triage your Inbox, surface what needs action, draft replies for your approval. Bodies stay local (routed to the local model); metadata (sender / subject / when) flows to Claude for reasoning.
+- **proton-cal-mcp** — completes the morning brief. "You've got 2 calendar blocks and 90 minutes of focus time after the 10am" becomes possible.
+- **broker** — the policy layer that makes the multi-MCP setup actually trustworthy. Without it, a compromised MCP has full agent privileges; with it, blast radius is bounded per tool and per provenance.
+- **Tailscale-exposed MCP** — Claude iOS gets full Pepper parity. Today the agent layer is Mac-bound; with this it follows you to mobile.
+
+### Deployment plan
+
+Two phases. The local-only phase validates that Pepper actually pays off before we add hosting complexity.
+
+**Phase 1 — Local on main Mac.** Stdio transport, this repo as-is. Things3 + things-mcp-server + Cowork all on the same machine. Smoke test, use for a week or two, observe where she actually adds value. Cost: nothing beyond install.
+
+**Phase 2 — Headless camper MBP as the Pepper host.** Migrate the server to a screen-broken MacBook Pro living in the camper. Starlink keeps it always-online; Tailscale gives it a stable network identity regardless of where the camper parks. Pepper follows the camper to Moab, Yellowstone, or the driveway without reconfiguration. Phone reaches her over Tailscale.
+
+```
+   Your phone (Claude iOS)              Your laptop (anywhere)
+            │                                    │
+            └──────────── Tailscale ─────────────┘
+                              │
+                              ▼
+                  ┌───────────────────────────┐
+                  │   Camper MBP (headless)   │
+                  │                           │
+                  │   things-mcp-server       │
+                  │     + HTTP transport      │
+                  │     + bearer-token auth   │
+                  │                           │
+                  │   Things 3 (signed into   │
+                  │     your Things Cloud,    │
+                  │     auto-syncs to main    │
+                  │     Mac + iPhone + Watch) │
+                  │                           │
+                  │   Auto-login, no sleep,   │
+                  │   HDMI dummy plug for     │
+                  │   clamshell wake          │
+                  └───────────┬───────────────┘
+                              │
+                              ▼
+                       Starlink (always on)
+```
+
+**The headless gotchas, in order of "will bite you":**
+
+1. **Clamshell-mode wakefulness.** Apple Silicon laptops with lid closed and no external display assume "user wants to sleep." Fix: ~$5 HDMI dummy plug (EDID emulator that fakes an external display), or `caffeinate -dimsu` as a LaunchDaemon. The dummy plug is the cleaner answer.
+2. **Sleep prevention beyond clamshell.** `sudo pmset -a sleep 0 disablesleep 1 powernap 0 standby 0 hibernatemode 0`.
+3. **FileVault + auto-login tension.** Keep FileVault enabled. `sudo pmset -a autorestart 1` for auto-reboot on power loss. Enable auto-login post-unlock. Accept that hard power loss = one manual unlock when you're next near the camper.
+4. **Initial setup with no screen.** Borrow an external display + USB-C dock for ~30 minutes of one-time setup, or use Apple Silicon Mac Sharing Mode via another Mac.
+5. **Things3 needs an active user session.** Auto-login handles this.
+
+**Migration steps (Phase 1 → Phase 2):**
+
+1. Get the MBP healthy on an external display (one-time).
+2. Install Things 3, sign into Things Cloud (your existing account), confirm sync — todos created on the MBP show up on your phone instantly.
+3. Install Node 22, clone the repo, `npm install && npm run build`.
+4. Seed Keychain with the Things URL token (the token authorizes any Things3 instance under your iCloud account, so the main Mac and the camper MBP share it).
+5. Install Tailscale, tag the node (e.g., `tag:pepper-host`).
+6. Apply the gotcha fixes above (auto-login, sleep suppression, autorestart, dummy plug).
+7. Close the lid. Disconnect display.
+8. Build HTTP transport + bearer auth (tasks #17/#18) targeting the MCP `2026-07-28` spec.
+9. Point Claude iOS at the Tailscale endpoint with its bearer token.
+
+After Phase 2, the main Mac becomes just a Things3 client like your phone is. The camper MBP is the agent backend; you talk to Pepper from wherever you happen to be.
 
 ## Setup
 
