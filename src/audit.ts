@@ -56,7 +56,16 @@ async function init(): Promise<void> {
     await setSecret(KNOWN_ACCOUNTS.auditKey, key);
   }
   const keyHex = await getAuditKey();
-  keyBuf = keyFromHex(keyHex);
+  try {
+    keyBuf = keyFromHex(keyHex);
+  } catch (err) {
+    throw new Error(
+      `Audit key in Keychain is malformed: ${err instanceof Error ? err.message : err}.\n` +
+      `Reset (loses existing audit history):\n` +
+      `  security delete-generic-password -s com.thingsmcp -a audit-key 2>/dev/null\n` +
+      `  security add-generic-password -s com.thingsmcp -a audit-key -U -w "$(openssl rand -hex 32)"`,
+    );
+  }
 
   db = new Database(DB_PATH);
   db.pragma("journal_mode = WAL");

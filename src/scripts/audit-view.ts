@@ -90,7 +90,18 @@ async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
 
   const keyHex = await getAuditKey();
-  const keyBuf = keyFromHex(keyHex);
+  let keyBuf: Buffer;
+  try {
+    keyBuf = keyFromHex(keyHex);
+  } catch (err) {
+    throw new Error(
+      `Audit key in Keychain is malformed: ${err instanceof Error ? err.message : err}.\n\n` +
+      `If you have no audit data to preserve (typical on first setup or after a botched seed), reset with:\n\n` +
+      `  security delete-generic-password -s com.thingsmcp -a audit-key 2>/dev/null\n` +
+      `  security add-generic-password -s com.thingsmcp -a audit-key -U -w "$(openssl rand -hex 32)"\n\n` +
+      `WARNING: regenerating the key makes any existing encrypted audit rows undecryptable.`,
+    );
+  }
 
   const db = new Database(DB_PATH, { readonly: true });
 
