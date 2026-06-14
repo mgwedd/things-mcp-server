@@ -1,6 +1,6 @@
 # things-mcp-server
 
-A local MCP server that exposes [Things 3](https://culturedcode.com/things/) as agent tools. Designed for personal use by a security-focused engineer: token in Keychain, audit log of every call, capture vs. reorganize split as a policy primitive.
+A local MCP server that exposes [Things 3](https://culturedcode.com/things/) as agent tools. Designed for personal use by a security-focused folks: token in Keychain, audit log of every call, capture vs. reorganize split as a policy primitive.
 
 **Status:** v0.1.0 — alpha, single user, build-from-source.
 
